@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	app.FindFolder("tmp\\")
+	app.MergePDF("tmp\\")
 	fmt.Println(" ")
 	fmt.Println("Processamento concluído. Pressione Enter para sair...")
 	var input string

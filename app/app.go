@@ -2,249 +2,122 @@ package app
 
 import (
 	"fmt"
-	"image"
-	"image/draw"
-	"image/jpeg"
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
 
-func FindFolder(dir string) {
-
-	folders, err := os.ReadDir(dir)
+func FindFolder(path string, filesMap map[string][]string) {
+	folders, err := os.ReadDir(path)
 	if err != nil {
-		log.Default().Printf("erro para abrir a pasta tmp. %v", err.Error())
+		log.Printf("erro ao abrir a pasta %s: %v", path, err.Error())
 		return
 	}
 
 	for _, folder := range folders {
-
 		if folder.IsDir() {
-			if folder.Name() == "guias" || folder.Name() == "laudos" || folder.Name() == "guias - tiss" {
+			folderName := folder.Name()
 
-				currentFolder := filepath.Join(dir, folder.Name())
-				//fmt.Println(currentFolder)
-
-				// Remove arquivos antigos antes de criar novos
-				err := removeOldMergedFiles(currentFolder)
-				if err != nil {
-					log.Default().Printf("Erro ao tentar remover arquivos antigos na pasta %s: %v", currentFolder, err)
-					continue
-				}
+			if folder.Name() == "guias" || folderName == "laudos" || folderName == "guias - tiss" {
+				currentFolder := filepath.Join(path, folder.Name())
 
 				files, err := os.ReadDir(currentFolder)
 				if err != nil {
-					log.Default().Printf("erro para abrir a pasta %s. %v", currentFolder, err.Error())
+					log.Printf("erro para abrir a pasta %s: %v", currentFolder, err.Error())
 					continue
 				}
-
-				var fileSize int64 = 0
-				var fileNames []string
-				var typeFile string
 
 				for _, file := range files {
-
+					filePath := filepath.Join(currentFolder, file.Name())
 					if !file.IsDir() && filepath.Ext(file.Name()) == ".pdf" || filepath.Ext(file.Name()) == ".jpg" {
 
-						fileName := filepath.Join(currentFolder, file.Name())
-						//fmt.Println(fileName)
-						fileNames = append(fileNames, fileName)
-
-						fileInfo, err := file.Info()
-						if err != nil {
-							log.Default().Printf("erro ao obter as informações do arquivo %s. %v", file.Name(), err.Error())
-							continue
+						if filesMap[folderName] == nil {
+							filesMap[folderName] = []string{}
 						}
 
-						fileSize += fileInfo.Size()
-						typeFile = filepath.Ext(file.Name())
+						filesMap[folderName] = append(filesMap[folderName], filePath)
 					}
 				}
 
-				if len(fileNames) == 0 {
-					continue
-				}
-
-				totalSizeMB := float64(fileSize) / (1024 * 1024)
-				if totalSizeMB > 100000 {
-					fmt.Printf("Tamanho total dos arquivos %s é %.2fMB", fileNames, totalSizeMB)
-					time.Sleep(3 * time.Second)
-					continue
-				}
-
-				switch typeFile {
-				case ".pdf":
-
-					err = mergeFiles(fileNames, currentFolder)
-					if err != nil {
-						log.Default().Printf("erro ao tentar mesclar os arquivos")
-						time.Sleep(3 * time.Second)
-						continue
-					}
-				case ".jpg":
-
-					outPutFile := filepath.Join(currentFolder, "laudos_merged.jpg")
-					err := mergeJPGsToImage(fileNames, outPutFile)
-					if err != nil {
-						log.Default().Printf("Erro ao fazer o merge dos JPGs: %v", err)
-						time.Sleep(3 * time.Second)
-						continue
-					}
-
-					err = mergeJPGToPDF(fileNames, currentFolder)
-					if err != nil {
-						log.Default().Printf("Erro ao fazer o merge dos JPGs para PDF: %v", err)
-						time.Sleep(3 * time.Second)
-						continue
-					}
-
-				}
-
-			} else {
-
-				currentFolder := filepath.Join(dir, folder.Name())
-				//recursive
-				FindFolder(currentFolder)
 			}
 
+			currentFolder := filepath.Join(path, folder.Name())
+			FindFolder(currentFolder, filesMap)
 		}
 	}
+
 }
 
-// mergeFiles somente para arquivos PDF - Usando a api PDFCPU
-func mergeFiles(fileNames []string, currentFolder string) error {
-	tempFile := filepath.Join(currentFolder, "merged_temp.pdf")
-	err := api.MergeCreateFile(fileNames, tempFile, false, nil)
-	if err != nil {
-		log.Default().Printf("erro ao tentar criar o arquivo temporário %s. %v", tempFile, err.Error())
-		return err
-	}
-	fmt.Printf("Arquivo temporário %s criado!\n", tempFile)
-
-	finalFile := filepath.Join(currentFolder, "merged.pdf")
-	err = os.Rename(tempFile, finalFile)
-	if err != nil {
-		log.Default().Printf("erro ao renomear o arquivo temporário %s para %s. %v", tempFile, finalFile, err.Error())
-		return err
-	}
-	fmt.Printf("Arquivo final %s criado com sucesso!\n", finalFile)
-
-	return nil
-}
-
-// mergeJPGToPDF - Cria um PDF a partir de arquivos JPG usando PDFCPU
-func mergeJPGToPDF(fileNames []string, currentFolder string) error {
-	tempFile := filepath.Join(currentFolder, "merged_temp.pdf")
-
+func MergeJPGsToPDF(filesNameJPG []string, outputFilePath string) error {
 	importDefault := pdfcpu.DefaultImportConfig()
 	conf := model.NewDefaultConfiguration()
 
-	fmt.Printf("Tentando criar o arquivo temporário %s...\n", tempFile)
-	err := api.ImportImagesFile(fileNames, tempFile, importDefault, conf)
+	err := api.ImportImagesFile(filesNameJPG, outputFilePath, importDefault, conf)
 	if err != nil {
-		log.Default().Printf("Erro ao tentar criar o arquivo temporário %s: %v", tempFile, err.Error())
-		return err
+		return fmt.Errorf("erro ao agrupar os JPGs em PDF: %v", err)
 	}
-	fmt.Printf("Arquivo temporário %s criado com sucesso!\n", tempFile)
-
-	finalFile := filepath.Join(currentFolder, "merged.pdf")
-	fmt.Printf("Tentando renomear o arquivo temporário %s para %s...\n", tempFile, finalFile)
-
-	err = os.Rename(tempFile, finalFile)
-	if err != nil {
-		log.Default().Printf("Erro ao renomear o arquivo temporário %s para %s: %v", tempFile, finalFile, err.Error())
-		return err
-	}
-	fmt.Printf("Arquivo final %s criado com sucesso!\n", finalFile)
-
 	return nil
 }
 
-// mergeJPFsToImagem usado pra mescar os arquivos em jpg - fonte: https://pkg.go.dev/image
-func mergeJPGsToImage(jpgFiles []string, output string) error {
-	var images []image.Image
-	var totalWidth, totalHeight int
-
-	// Carregar todas as imagens e calcular a largura e altura total da imagem combinada
-	for _, jpgFile := range jpgFiles {
-		file, err := os.Open(jpgFile)
+func TotalSize(files []string) (int64, error) {
+	var totalSize int64
+	for _, file := range files {
+		info, err := os.Stat(file)
 		if err != nil {
-			return fmt.Errorf("erro ao abrir o arquivo JPG %s: %w", jpgFile, err)
+			return 0, fmt.Errorf("erro ao obter informações do arquivo %s: %v", file, err)
 		}
-		defer file.Close()
-
-		img, err := jpeg.Decode(file)
-		if err != nil {
-			return fmt.Errorf("erro ao decodificar o arquivo JPG %s: %w", jpgFile, err)
-		}
-
-		images = append(images, img)
-		totalWidth = max(totalWidth, img.Bounds().Dx())
-		totalHeight += img.Bounds().Dy()
+		totalSize += info.Size()
 	}
-
-	// Criar uma nova imagem com as dimensões calculadas
-	combinedImage := image.NewRGBA(image.Rect(0, 0, totalWidth, totalHeight))
-
-	// Desenhar as imagens uma abaixo da outra na imagem combinada
-	yOffset := 0
-	for _, img := range images {
-		draw.Draw(combinedImage, image.Rect(0, yOffset, img.Bounds().Dx(), yOffset+img.Bounds().Dy()), img, image.Point{}, draw.Src)
-		yOffset += img.Bounds().Dy()
-	}
-
-	// Criar o arquivo de saída
-	outputFile, err := os.Create(output)
-	if err != nil {
-		return fmt.Errorf("erro ao criar o arquivo de saída %s: %w", output, err)
-	}
-	defer outputFile.Close()
-
-	// Salvar a imagem combinada no arquivo de saída
-	err = jpeg.Encode(outputFile, combinedImage, nil)
-	if err != nil {
-		return fmt.Errorf("erro ao codificar a imagem combinada: %w", err)
-	}
-
-	return nil
+	return totalSize, nil
 }
 
-// Função auxiliar para obter o valor máximo entre dois inteiros
-func max(x, y int) int {
-	if x > y {
-		return x
-	}
-	return y
-}
+func MergePDF(path string) {
+	filesMap := make(map[string][]string)
 
-// DELETAR OS ARQUIVOS MESCLADOS ANTES DE CRIAR OS NOVOS
-func removeOldMergedFiles(folder string) error {
-	filesToRemove := []string{
-		filepath.Join(folder, "merged.pdf"),
-		filepath.Join(folder, "merged.jpg"),
-	}
+	FindFolder(path, filesMap)
 
-	for _, file := range filesToRemove {
-		if fileExists(file) {
-			err := os.Remove(file)
+	for folder, files := range filesMap {
+		if len(files) > 0 {
+			totalSize, err := TotalSize(files)
 			if err != nil {
-				log.Default().Printf("Erro ao remover o arquivo %s: %v", file, err)
-				return err
+				log.Printf("erro para calcular o tamanho total dos arquivos da pasta %s. %v", folder, err.Error())
+				continue
 			}
-			fmt.Printf("Arquivo %s removido com sucesso.\n", file)
+
+			if totalSize > 100*1024*1024 {
+				log.Printf("O tamanho total dos arquivos na pasta %s é de %.2f MB. Nenhum arquivo será gerado.\n", folder, float64(totalSize)/1024/1024)
+				continue
+			}
+
+			fileType := filepath.Ext(files[0])
+			newFileName := fmt.Sprintf("%s_merged.pdf", folder)
+
+			if fileType == ".pdf" {
+				newFile := filepath.Join(path, newFileName)
+				err := api.MergeCreateFile(files, newFile, false, nil)
+				if err != nil {
+					log.Printf("Erro ao agrupar PDFs da pasta %s: %v", folder, err)
+					log.Fatal(1)
+					continue
+				}
+			}
+
+			if fileType == ".jpg" {
+				jpgOutputFile := filepath.Join(path, newFileName)
+				err := MergeJPGsToPDF(files, jpgOutputFile)
+				if err != nil {
+					log.Printf("Erro ao agrupar JPGs da pasta %s: %v", folder, err)
+					log.Fatal(1)
+					continue
+				}
+			}
+
+			fmt.Printf("O tamanho total dos arquivos na pasta %s é menor que 100 MB\n", folder)
 		}
 	}
-	return nil
-}
 
-// Função auxiliar para verificar se um arquivo existe
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	return !os.IsNotExist(err)
 }
