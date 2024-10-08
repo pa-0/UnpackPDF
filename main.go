@@ -3,13 +3,13 @@ package main
 import (
 	"fmt"
 
-	"github.com/mattheusrocha2/mergeJPG-PDF/app"
+	"github.com/pa-0/UnpackPDF/app"
 )
 
 func main() {
-	app.MergePDF("tmp\\")
+	app.UnpackPDF("tmp\\")
 	fmt.Println(" ")
-	fmt.Println("Processamento concluído. Pressione Enter para sair...")
+	fmt.Println("Extraction Complete. Press enter to exit...")
 	var input string
 	fmt.Scanln(&input)
 

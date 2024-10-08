@@ -52,18 +52,19 @@ func FindFolder(path string, filesMap map[string][]string) {
 
 }
 
-func MergeJPGsToPDF(filesNameJPG []string, outputFilePath string) error {
+ unPackConfig(inPDF []string, outDir string) error {
 	importDefault := pdfcpu.DefaultImportConfig()
 	conf := model.NewDefaultConfiguration()
 
-	err := api.ImportImagesFile(filesNameJPG, outputFilePath, importDefault, conf)
+	err := api.ExtractAttachmentsFile(inPDF, outDir, importDefault, conf)
 	if err != nil {
 		return fmt.Errorf("erro ao agrupar os JPGs em PDF: %v", err)
 	}
 	return nil
 }
 
-func TotalSize(files []string) (int64, error) {
+
+/*func TotalSize(files []string) (int64, error) {
 	var totalSize int64
 	for _, file := range files {
 		info, err := os.Stat(file)
@@ -74,8 +75,8 @@ func TotalSize(files []string) (int64, error) {
 	}
 	return totalSize, nil
 }
-
-func MergePDF(path string) {
+*/
+func UnpackPDF(path string) {
 	filesMap := make(map[string][]string)
 
 	FindFolder(path, filesMap)
@@ -84,28 +85,28 @@ func MergePDF(path string) {
 		if len(files) > 0 {
 			totalSize, err := TotalSize(files)
 			if err != nil {
-				log.Printf("erro para calcular o tamanho total dos arquivos da pasta %s. %v", folder, err.Error())
+				log.Printf("Error calculating total size of files %s. %v", folder, err.Error())
 				continue
 			}
-
+/*
 			if totalSize > 100*1024*1024 {
 				log.Printf("O tamanho total dos arquivos na pasta %s é de %.2f MB. Nenhum arquivo será gerado.\n", folder, float64(totalSize)/1024/1024)
 				continue
 			}
-
+*/
 			fileType := filepath.Ext(files[0])
-			newFileName := fmt.Sprintf("%s_merged.pdf", folder)
+			//newFileName := fmt.Sprintf("%s_merged.pdf", folder)
 
 			if fileType == ".pdf" {
 				newFile := filepath.Join(path, newFileName)
-				err := api.MergeCreateFile(files, newFile, false, nil)
+				err := api.ExtractAttachmentsFile("in.pdf", "outDir", nil, nil)(files, newFile, false, nil)
 				if err != nil {
-					log.Printf("Erro ao agrupar PDFs da pasta %s: %v", folder, err)
+					log.Printf("Error - no PDFs found %s: %v", folder, err)
 					log.Fatal(1)
 					continue
 				}
 			}
-
+/*
 			if fileType == ".jpg" {
 				jpgOutputFile := filepath.Join(path, newFileName)
 				err := MergeJPGsToPDF(files, jpgOutputFile)
@@ -114,9 +115,10 @@ func MergePDF(path string) {
 					log.Fatal(1)
 					continue
 				}
+*/			
 			}
 
-			fmt.Printf("O tamanho total dos arquivos na pasta %s é menor que 100 MB\n", folder)
+			//fmt.Printf("O tamanho total dos arquivos na pasta %s é menor que 100 MB\n", folder)
 		}
 	}
 
